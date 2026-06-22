@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { aiEnabled } from '../config/env';
 import { authenticate, type AuthedAgent } from '../lib/auth';
 import { NotFoundError, UpstreamError, ValidationError, errorMessage } from '../lib/errors';
 import { supabase } from '../lib/supabase';
@@ -61,6 +62,25 @@ async function customerIgId(customerId: string): Promise<string> {
     .single();
   if (error || !data) throw new UpstreamError('failed to load customer', { cause: error });
   return (data as { ig_user_id: string }).ig_user_id;
+}
+
+async function countWebhookEvents(sinceIso?: string): Promise<number> {
+  let query = supabase.from('webhook_events').select('id', { count: 'exact', head: true });
+  if (sinceIso) query = query.gte('received_at', sinceIso);
+  const { count, error } = await query;
+  if (error) throw new UpstreamError('failed to count webhook events', { cause: error });
+  return count ?? 0;
+}
+
+async function lastWebhookEvent(): Promise<{ received_at: string; error: string | null } | null> {
+  const { data, error } = await supabase
+    .from('webhook_events')
+    .select('received_at, error')
+    .order('received_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new UpstreamError('failed to read webhook events', { cause: error });
+  return (data as { received_at: string; error: string | null } | null) ?? null;
 }
 
 // All endpoints require a valid Supabase agent session, verified server-side.
@@ -171,6 +191,30 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
   app.post('/instagram/subscribe', async (_request, reply) => {
     const subscribed = await subscribeToMessages();
     return reply.send({ subscribed });
+  });
+
+  // One-call health/diagnostic snapshot for the dashboard: is Instagram
+  // connected + subscribed, is AI on, and crucially — are webhooks actually
+  // arriving from Meta (and is processing erroring)?
+  app.get('/diagnostics', async (_request, reply) => {
+    const creds = await getStoredCredentials();
+    const connected = Boolean(creds);
+    const subscribedToMessages = connected ? await isSubscribedToMessages() : false;
+
+    const total = await countWebhookEvents();
+    const lastHour = await countWebhookEvents(new Date(Date.now() - 3_600_000).toISOString());
+    const last = await lastWebhookEvent();
+
+    return reply.send({
+      instagram: { connected, subscribedToMessages, igUserId: creds?.igUserId ?? null },
+      ai: { enabled: aiEnabled },
+      webhooks: {
+        total,
+        lastHour,
+        lastReceivedAt: last?.received_at ?? null,
+        lastError: last?.error ?? null,
+      },
+    });
   });
 
   app.get('/instagram/connect-url', async (_request, reply) => {
