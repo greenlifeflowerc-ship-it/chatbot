@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { env } from '../config/env';
+import { subscribeToMessages } from '../services/instagram/client';
 import { buildAuthorizeUrl, exchangeCodeForToken, isOAuthConfigured } from '../services/instagram/oauth';
 import { consumeState, rememberState } from '../services/instagram/oauthState';
 import { getStoredCredentials, saveCredentials } from '../services/instagram/tokenStore';
@@ -71,6 +72,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         expiresAt,
       });
       request.log.info({ igUserId: token.igUserId, tokenType: token.tokenType }, 'instagram connected');
+
+      // Subscribe the account to message webhooks — required for Instagram to
+      // deliver DMs. Best-effort: a failure here doesn't undo the connection.
+      try {
+        const subscribed = await subscribeToMessages();
+        request.log.info({ subscribed }, 'subscribed Instagram account to message webhooks');
+      } catch (subErr) {
+        request.log.warn({ err: subErr }, 'failed to subscribe account to message webhooks');
+      }
+
       return reply
         .type('text/html')
         .send(page('Instagram connected', 'Your Instagram account is connected. You can close this tab.'));

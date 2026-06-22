@@ -103,6 +103,33 @@ export async function sendMessage(
   };
 }
 
+// Subscribe the connected Instagram account to message webhooks. This is a
+// required step with Instagram Login: without it, Instagram does NOT deliver DM
+// webhooks for the account even when the app-level webhook is configured.
+export async function subscribeToMessages(): Promise<boolean> {
+  const body = (await withRetry(
+    () => graphFetch('me/subscribed_apps?subscribed_fields=messages', { method: 'POST' }),
+    { retries: 2, label: 'ig.subscribeToMessages' },
+  )) as { success?: boolean };
+  return body.success === true;
+}
+
+// Whether the connected account is currently subscribed to message webhooks.
+// Best-effort — returns false if the check fails.
+export async function isSubscribedToMessages(): Promise<boolean> {
+  try {
+    const body = (await graphFetch('me/subscribed_apps', { method: 'GET' })) as {
+      data?: Array<{ subscribed_fields?: Array<string | { name?: string }> }>;
+    };
+    return (body.data ?? []).some((app) =>
+      (app.subscribed_fields ?? []).some((f) => (typeof f === 'string' ? f : f.name) === 'messages'),
+    );
+  } catch (err) {
+    logger.warn({ err }, 'could not read Instagram webhook subscription');
+    return false;
+  }
+}
+
 export interface IgProfile {
   username: string | null;
   name: string | null;

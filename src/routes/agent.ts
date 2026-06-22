@@ -4,7 +4,12 @@ import { z } from 'zod';
 import { authenticate, type AuthedAgent } from '../lib/auth';
 import { NotFoundError, UpstreamError, ValidationError, errorMessage } from '../lib/errors';
 import { supabase } from '../lib/supabase';
-import { isWithinStandardWindow, sendMessage } from '../services/instagram/client';
+import {
+  isSubscribedToMessages,
+  isWithinStandardWindow,
+  sendMessage,
+  subscribeToMessages,
+} from '../services/instagram/client';
 import { buildAuthorizeUrl, isOAuthConfigured } from '../services/instagram/oauth';
 import { rememberState } from '../services/instagram/oauthState';
 import { getStoredCredentials } from '../services/instagram/tokenStore';
@@ -149,12 +154,23 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
   // gate, so no setup secret is needed here.
   app.get('/instagram/status', async (_request, reply) => {
     const creds = await getStoredCredentials();
+    const connected = Boolean(creds);
+    // Whether Instagram will actually deliver DMs to us. Connected-but-not-
+    // subscribed is the common reason messages never arrive.
+    const subscribedToMessages = connected ? await isSubscribedToMessages() : false;
     return reply.send({
-      connected: Boolean(creds),
+      connected,
       igUserId: creds?.igUserId ?? null,
       tokenType: creds?.tokenType ?? null,
       expiresAt: creds?.expiresAt ?? null,
+      subscribedToMessages,
     });
+  });
+
+  // Manually (re)subscribe the connected account to message webhooks.
+  app.post('/instagram/subscribe', async (_request, reply) => {
+    const subscribed = await subscribeToMessages();
+    return reply.send({ subscribed });
   });
 
   app.get('/instagram/connect-url', async (_request, reply) => {
