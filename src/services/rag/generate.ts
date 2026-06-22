@@ -90,13 +90,20 @@ export async function generateAnswer(args: {
   chunks: ChunkMatch[];
   history: Message[];
   isFirstReply?: boolean;
+  imageUrls?: string[];
 }): Promise<GenerationResult> {
   const llm = getLlmProvider();
   const system = buildSystemPrompt(args.settings, args.chunks, args.isFirstReply ?? false);
   const messages = toConversationMessages(args.history);
 
   // Shorter, warmer replies — also faster to generate (less to stream back).
-  const raw = await llm.complete({ system, messages, maxTokens: 350, temperature: 0.55 });
+  const raw = await llm.complete({
+    system,
+    messages,
+    imageUrls: args.imageUrls,
+    maxTokens: 350,
+    temperature: 0.55,
+  });
   const answer = raw.trim();
   return { answer, canAnswer: answer.length > 0, raw };
 }

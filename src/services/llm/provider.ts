@@ -17,6 +17,9 @@ export interface LlmMessage {
 export interface LlmRequest {
   system: string;
   messages: LlmMessage[];
+  // Image URLs attached to the latest user turn (handled by vision-capable
+  // providers; ignored otherwise).
+  imageUrls?: string[];
   maxTokens?: number;
   temperature?: number;
 }
@@ -82,18 +85,48 @@ class GroqProvider implements LlmProvider {
   });
 
   async complete(request: LlmRequest): Promise<string> {
+    const images = request.imageUrls ?? [];
+    const hasImages = images.length > 0;
+    // When an image is present, use the vision model so it sees the picture and
+    // the customer's question together (the question is the latest user turn).
+    const model = hasImages ? env.GROQ_VISION_MODEL : this.model;
+
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      { role: 'system', content: request.system },
+    ];
+    request.messages.forEach((m, i) => {
+      const isLastUser = i === request.messages.length - 1 && m.role === 'user';
+      if (isLastUser && hasImages) {
+        messages.push({
+          role: 'user',
+          content: [
+            { type: 'text', text: m.content || 'Please look at the image.' },
+            ...images.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
+          ],
+        });
+      } else {
+        messages.push({ role: m.role, content: m.content });
+      }
+    });
+    if (hasImages && !request.messages.some((m) => m.role === 'user')) {
+      messages.push({
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Please look at the image.' },
+          ...images.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
+        ],
+      });
+    }
+
     return llmLimiter(() =>
       withRetry(
         async () => {
           try {
             const resp = await this.client.chat.completions.create({
-              model: this.model,
+              model,
               max_tokens: request.maxTokens ?? 1024,
               temperature: request.temperature ?? 0.2,
-              messages: [
-                { role: 'system', content: request.system },
-                ...request.messages.map((m) => ({ role: m.role, content: m.content })),
-              ],
+              messages,
             });
             return (resp.choices[0]?.message?.content ?? '').trim();
           } catch (err) {

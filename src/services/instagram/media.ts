@@ -4,9 +4,14 @@ import { logger } from '../../lib/logger';
 import { withRetry } from '../../lib/retry';
 import type { InboundMessage } from '../../types';
 
-// Voice + image understanding via Groq (Whisper for audio, a vision model for
-// images). All best-effort: any failure degrades to a short placeholder so the
-// text reply flow never breaks.
+// Voice + image understanding. Audio is transcribed to text (Groq Whisper).
+// Images are passed through as URLs so the vision model sees them together with
+// the customer's question — not turned into a lossy text description.
+
+export interface ResolvedContent {
+  text: string; // customer text + transcribed voice
+  imageUrls: string[]; // image attachments, handed to the vision model
+}
 
 function groqClient(): OpenAI {
   return new OpenAI({
@@ -16,16 +21,24 @@ function groqClient(): OpenAI {
   });
 }
 
-async function fetchAttachment(url: string): Promise<{ buffer: Buffer; contentType: string }> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`attachment download failed: ${res.status}`);
-  const buffer = Buffer.from(await res.arrayBuffer());
-  return { buffer, contentType: res.headers.get('content-type') ?? 'application/octet-stream' };
+function audioExt(contentType: string): string {
+  const ct = contentType.toLowerCase();
+  if (ct.includes('mp4')) return 'mp4';
+  if (ct.includes('aac')) return 'aac';
+  if (ct.includes('mpeg') || ct.includes('mp3')) return 'mp3';
+  if (ct.includes('ogg')) return 'ogg';
+  if (ct.includes('wav')) return 'wav';
+  if (ct.includes('webm')) return 'webm';
+  return 'm4a';
 }
 
 async function transcribeAudio(url: string): Promise<string> {
-  const { buffer } = await fetchAttachment(url);
-  const file = await toFile(buffer, 'audio.m4a');
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`audio download failed: ${res.status}`);
+  const contentType = res.headers.get('content-type') ?? 'audio/mp4';
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const file = await toFile(buffer, `audio.${audioExt(contentType)}`, { type: contentType });
+
   const result = await withRetry(
     () => groqClient().audio.transcriptions.create({ file, model: env.GROQ_WHISPER_MODEL }),
     { retries: 2, label: 'groq.transcribe' },
@@ -33,58 +46,36 @@ async function transcribeAudio(url: string): Promise<string> {
   return (result.text ?? '').trim();
 }
 
-async function describeImage(url: string): Promise<string> {
-  const resp = await withRetry(
-    () =>
-      groqClient().chat.completions.create({
-        model: env.GROQ_VISION_MODEL,
-        max_tokens: 300,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Describe what the customer is showing in this image, including any product, item, or text visible. Be concise.',
-              },
-              { type: 'image_url', image_url: { url } },
-            ],
-          },
-        ],
-      }),
-    { retries: 2, label: 'groq.vision' },
-  );
-  return (resp.choices[0]?.message?.content ?? '').trim();
-}
-
-// Resolve an inbound message (text and/or attachments) into the text the bot
-// should reason over. Transcribes voice, describes images; falls back to a short
-// placeholder when AI is off or a media call fails.
-export async function resolveInboundContent(inbound: InboundMessage): Promise<string> {
+// Split an inbound message into the text to reason over (its text plus any
+// transcribed voice) and the image URLs to show the vision model. All media is
+// best-effort: failures degrade to a short note rather than breaking the reply.
+export async function resolveInboundContent(inbound: InboundMessage): Promise<ResolvedContent> {
   const parts: string[] = [];
   if (inbound.text) parts.push(inbound.text);
+  const imageUrls: string[] = [];
 
   for (const att of inbound.attachments) {
     const type = att.type.toLowerCase();
-    if (!aiEnabled) {
-      parts.push(`[customer sent ${type === 'audio' ? 'a voice message' : `a ${type}`}]`);
+    if (type === 'image') {
+      imageUrls.push(att.url);
       continue;
     }
-    try {
-      if (type === 'audio') {
+    if (type === 'audio') {
+      if (!aiEnabled) {
+        parts.push('[voice message]');
+        continue;
+      }
+      try {
         const text = await transcribeAudio(att.url);
         parts.push(text ? `(voice message) ${text}` : '[voice message: could not transcribe]');
-      } else if (type === 'image') {
-        const desc = await describeImage(att.url);
-        parts.push(desc ? `(customer sent an image) ${desc}` : '[customer sent an image]');
-      } else {
-        parts.push(`[customer sent a ${type}]`);
+      } catch (err) {
+        logger.warn({ err }, 'failed to transcribe voice message');
+        parts.push('[voice message: could not transcribe]');
       }
-    } catch (err) {
-      logger.warn({ err, type }, 'failed to process attachment');
-      parts.push(type === 'audio' ? '[voice message: could not transcribe]' : `[customer sent a ${type}]`);
+      continue;
     }
+    parts.push(`[customer sent a ${type}]`);
   }
 
-  return parts.join('\n').trim() || '[empty message]';
+  return { text: parts.join('\n').trim(), imageUrls };
 }

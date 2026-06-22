@@ -50,13 +50,16 @@ export async function processEvent(event: WebhookMessageEvent): Promise<void> {
     const customer = await upsertCustomer(inbound.senderId, () => getUserProfile(inbound.senderId));
     const { conversation, isNew } = await getOrCreateConversation(customer.id);
 
-    // Resolve voice/image attachments to text (transcribe / describe) so the bot
-    // understands more than plain text.
-    const content = await resolveInboundContent(inbound);
+    // Resolve voice to text (transcribe) and collect image URLs for the vision
+    // model so the bot understands more than plain text.
+    const resolved = await resolveInboundContent(inbound);
+    const recordedContent = resolved.imageUrls.length
+      ? `${resolved.text}${resolved.text ? ' ' : ''}[image]`.trim()
+      : resolved.text || '[empty message]';
 
     await recordInboundMessage({
       conversationId: conversation.id,
-      content,
+      content: recordedContent,
       igMessageId: inbound.igMessageId,
     });
 
@@ -93,20 +96,21 @@ export async function processEvent(event: WebhookMessageEvent): Promise<void> {
     // AI path. Any failure here (embedding/generation/keys) routes to a human
     // with the auto-reply rather than leaving the customer with no response.
     try {
-      const retrieval = await retrieve(content);
+      const retrieval = await retrieve(resolved.text || 'image');
       const history = await getRecentHistory(conversation.id, env.RAG_MAX_HISTORY);
       const generation = await generateAnswer({
         settings,
         chunks: retrieval.chunks,
         history,
         isFirstReply: isNew,
+        imageUrls: resolved.imageUrls,
       });
 
       const decision = decideEscalation({
         settings,
         topSimilarity: retrieval.topSimilarity,
         canAnswer: generation.canAnswer,
-        userText: content,
+        userText: resolved.text,
       });
 
       if (decision.escalate) {
