@@ -38,7 +38,15 @@ services:
         sync: false
       - key: META_VERIFY_TOKEN
         sync: false
-      - key: IG_ACCESS_TOKEN
+      # Instagram Business Login (OAuth). IG_REDIRECT_URI must match the URI
+      # registered in the Meta app, e.g. https://<service>.onrender.com/auth/instagram/callback
+      - key: IG_APP_ID
+        sync: false
+      - key: IG_APP_SECRET
+        sync: false
+      - key: IG_REDIRECT_URI
+        sync: false
+      - key: IG_SETUP_SECRET
         sync: false
       - key: LLM_MODEL
         sync: false

@@ -16,7 +16,21 @@ const EnvSchema = z.object({
 
   META_APP_SECRET: z.string().min(1),
   META_VERIFY_TOKEN: z.string().min(1),
-  IG_ACCESS_TOKEN: z.string().min(1),
+
+  // Instagram Business Login (OAuth). The business connects by logging in; the
+  // backend captures, stores, and refreshes the token automatically. All
+  // optional so the server still boots before it is connected.
+  IG_APP_ID: z.string().optional(),
+  IG_APP_SECRET: z.string().optional(),
+  IG_REDIRECT_URI: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().url().optional(),
+  ),
+  // Gates who may start the connect flow (?secret=...). Strongly recommended.
+  IG_SETUP_SECRET: z.string().optional(),
+  // Optional manual fallback token (used if no token has been stored via OAuth).
+  IG_ACCESS_TOKEN: z.string().optional(),
+
   GRAPH_BASE: z.string().url().default('https://graph.instagram.com'),
   GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/, 'expected a version like v23.0').default('v23.0'),
 

@@ -71,12 +71,28 @@ src/
 - `config/env.ts` validates all env at boot and exits with a clear message if
   anything is missing.
 
-## Instagram token refresh
+## Connect Instagram (Login)
 
-Long-lived Instagram tokens last ~60 days. Run `npm run refresh-token` on a
-schedule (e.g. monthly) and update `IG_ACCESS_TOKEN` in the deployment
-environment with the printed value. The script calls
-`GET {GRAPH_BASE}/refresh_access_token?grant_type=ig_refresh_token`.
+The bot connects to Instagram via **Instagram Business Login** — you log in once,
+no token copying.
+
+One-time setup:
+1. Run [`db/instagram_credentials.sql`](db/instagram_credentials.sql) in Supabase
+   (token storage).
+2. In the Meta app → **Instagram → API setup with Instagram login**, set
+   `IG_APP_ID` and `IG_APP_SECRET`, and register the redirect URI
+   `https://<service>/auth/instagram/callback` as `IG_REDIRECT_URI`.
+3. Choose an `IG_SETUP_SECRET` (any random string) so only you can start the flow.
+
+Then connect: open `https://<service>/auth/instagram?secret=<IG_SETUP_SECRET>` in
+a browser → **Continue with Instagram** → authorize. The backend exchanges the
+code for a long-lived token, stores it, and uses it for all Graph API calls.
+
+- Connection status: `GET /auth/instagram/status?secret=<IG_SETUP_SECRET>`.
+- The token (~60 days) is **refreshed automatically** by the running server. You
+  can also force it with `npm run refresh-token`.
+- `IG_ACCESS_TOKEN` remains an optional manual fallback if you prefer to paste a
+  token instead of logging in.
 
 ## Deploy (Render)
 

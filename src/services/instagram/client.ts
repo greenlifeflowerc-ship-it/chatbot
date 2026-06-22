@@ -2,6 +2,7 @@ import { env } from '../../config/env';
 import { UpstreamError } from '../../lib/errors';
 import { logger } from '../../lib/logger';
 import { withRetry } from '../../lib/retry';
+import { getAccessToken } from './tokenStore';
 
 // Instagram Graph API client (Instagram Login flavour — graph.instagram.com).
 // Base URL and version come from env so the API version is never hardcoded.
@@ -33,12 +34,13 @@ export function isWithinStandardWindow(lastCustomerAt: string | null, now: numbe
 
 async function graphFetch(path: string, init: RequestInit): Promise<unknown> {
   const url = `${env.GRAPH_BASE}/${env.GRAPH_VERSION}/${path}`;
+  const token = await getAccessToken();
   let res: Response;
   try {
     res = await fetch(url, {
       ...init,
       headers: {
-        Authorization: `Bearer ${env.IG_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         ...(init.headers ?? {}),
       },
     });

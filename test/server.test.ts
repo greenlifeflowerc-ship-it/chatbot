@@ -77,3 +77,26 @@ describe('agent routes require authentication', () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+describe('Instagram connect (OAuth) routes', () => {
+  it('refuses to start without the setup secret', async () => {
+    const res = await app.inject({ method: 'GET', url: '/auth/instagram' });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('redirects to Instagram with the correct setup secret', async () => {
+    const res = await app.inject({ method: 'GET', url: '/auth/instagram?secret=test-setup-secret' });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toContain('instagram.com/oauth/authorize');
+  });
+
+  it('rejects a callback with an unknown state', async () => {
+    const res = await app.inject({ method: 'GET', url: '/auth/instagram/callback?code=abc&state=never-issued' });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('guards the status endpoint behind the setup secret', async () => {
+    const res = await app.inject({ method: 'GET', url: '/auth/instagram/status' });
+    expect(res.statusCode).toBe(403);
+  });
+});

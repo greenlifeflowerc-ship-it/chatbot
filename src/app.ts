@@ -5,6 +5,7 @@ import { isProduction } from './config/env';
 import { errorMessage, isAppError } from './lib/errors';
 import { logger } from './lib/logger';
 import { agentRoutes } from './routes/agent';
+import { authRoutes } from './routes/auth';
 import { healthRoutes } from './routes/health';
 import { webhookRoutes } from './routes/webhook';
 
@@ -69,6 +70,7 @@ export async function buildServer() {
   });
 
   await app.register(healthRoutes);
+  await app.register(authRoutes);
   await app.register(webhookRoutes);
   await app.register(agentRoutes, { prefix: '/agent' });
 
