@@ -1,0 +1,180 @@
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { authenticate, type AuthedAgent } from '../lib/auth';
+import { NotFoundError, UpstreamError, ValidationError, errorMessage } from '../lib/errors';
+import { supabase } from '../lib/supabase';
+import { isWithinStandardWindow, sendMessage } from '../services/instagram/client';
+import {
+  getConversation,
+  recordOutboundMessage,
+  transitionStatus,
+} from '../services/conversation/store';
+import {
+  createDocument,
+  deleteDocument,
+  ingestDocument,
+  updateDocument,
+} from '../services/rag/ingest';
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    agent?: AuthedAgent;
+  }
+}
+
+const IdParam = z.object({ id: z.string().uuid() });
+const ReplyBody = z.object({ text: z.string().trim().min(1).max(2000) });
+const CreateDocBody = z.object({
+  title: z.string().trim().min(1).max(300),
+  content: z.string().trim().min(1),
+  sourceType: z.string().trim().max(50).optional(),
+});
+const UpdateDocBody = z
+  .object({
+    title: z.string().trim().min(1).max(300).optional(),
+    content: z.string().trim().min(1).optional(),
+  })
+  .refine((b) => b.title !== undefined || b.content !== undefined, {
+    message: 'Provide a title or content to update',
+  });
+
+async function loadConversationOrThrow(id: string) {
+  const conversation = await getConversation(id);
+  if (!conversation) throw new NotFoundError('Conversation not found');
+  return conversation;
+}
+
+async function customerIgId(customerId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('customers')
+    .select('ig_user_id')
+    .eq('id', customerId)
+    .single();
+  if (error || !data) throw new UpstreamError('failed to load customer', { cause: error });
+  return (data as { ig_user_id: string }).ig_user_id;
+}
+
+// All endpoints require a valid Supabase agent session, verified server-side.
+export async function agentRoutes(app: FastifyInstance): Promise<void> {
+  app.addHook('preHandler', async (request) => {
+    request.agent = await authenticate(request);
+  });
+
+  app.post('/conversations/:id/takeover', async (request, reply) => {
+    const { id } = IdParam.parse(request.params);
+    const conversation = await transitionStatus({
+      conversationId: id,
+      to: 'human',
+      reason: 'agent_takeover',
+      agentId: request.agent!.agentId,
+      assign: true,
+    });
+    return reply.send({ conversation });
+  });
+
+  app.post('/conversations/:id/handback', async (request, reply) => {
+    const { id } = IdParam.parse(request.params);
+    const conversation = await transitionStatus({
+      conversationId: id,
+      to: 'bot',
+      reason: 'agent_handback',
+      agentId: null,
+      assign: true,
+    });
+    return reply.send({ conversation });
+  });
+
+  app.post('/conversations/:id/close', async (request, reply) => {
+    const { id } = IdParam.parse(request.params);
+    const conversation = await transitionStatus({
+      conversationId: id,
+      to: 'closed',
+      reason: 'agent_close',
+    });
+    return reply.send({ conversation });
+  });
+
+  app.post('/conversations/:id/reply', async (request, reply) => {
+    const { id } = IdParam.parse(request.params);
+    const { text } = ReplyBody.parse(request.body);
+    const agentId = request.agent!.agentId;
+
+    const conversation = await loadConversationOrThrow(id);
+    const igUserId = await customerIgId(conversation.customer_id);
+
+    // An agent replying owns the conversation: ensure it is in human state and
+    // assigned to them so the bot stops and the inbox reflects ownership.
+    if (conversation.status !== 'human' || conversation.assigned_agent_id !== agentId) {
+      await transitionStatus({
+        conversationId: id,
+        to: 'human',
+        reason: 'agent_reply',
+        agentId,
+        assign: true,
+      });
+    }
+
+    // Outside the 24h window, a human reply must carry the human_agent tag.
+    const tag = isWithinStandardWindow(conversation.last_customer_at) ? undefined : 'human_agent';
+
+    try {
+      const result = await sendMessage(igUserId, text, tag ? { tag } : {});
+      const message = await recordOutboundMessage({
+        conversationId: id,
+        sender: 'agent',
+        content: text,
+        status: 'sent',
+        igMessageId: result.messageId || undefined,
+        metadata: { agentId },
+      });
+      return reply.send({ message });
+    } catch (err) {
+      await recordOutboundMessage({
+        conversationId: id,
+        sender: 'agent',
+        content: text,
+        status: 'failed',
+        error: errorMessage(err),
+        metadata: { agentId },
+      });
+      throw new UpstreamError('Failed to deliver message to Instagram', { cause: err });
+    }
+  });
+
+  app.post('/knowledge', async (request, reply) => {
+    const body = CreateDocBody.parse(request.body);
+    const result = await createDocument(body);
+    return reply.code(201).send(result);
+  });
+
+  app.put('/knowledge/:id', async (request, reply) => {
+    const { id } = IdParam.parse(request.params);
+    const body = UpdateDocBody.parse(request.body);
+    const result = await updateDocument(id, body);
+    return reply.send(result);
+  });
+
+  app.delete('/knowledge/:id', async (request, reply) => {
+    const { id } = IdParam.parse(request.params);
+    await deleteDocument(id);
+    return reply.code(204).send();
+  });
+
+  // Force a re-embed from the stored raw content (e.g. after switching models).
+  app.post('/knowledge/:id/reembed', async (request, reply) => {
+    const { id } = IdParam.parse(request.params);
+    const { data, error } = await supabase
+      .from('knowledge_documents')
+      .select('raw_content')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw new UpstreamError('failed to load document', { cause: error });
+    if (!data) throw new NotFoundError('Document not found');
+    if (!(data as { raw_content: string }).raw_content.trim()) {
+      throw new ValidationError('Document has no content to embed');
+    }
+
+    const chunkCount = await ingestDocument(id, (data as { raw_content: string }).raw_content);
+    return reply.send({ id, chunkCount });
+  });
+}

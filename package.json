@@ -1,0 +1,38 @@
+{
+  "name": "ig-support-bot-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Instagram customer-service bot — webhook receiver, RAG, escalation, Graph API client.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed": "tsx --env-file=.env scripts/seedKnowledge.ts",
+    "refresh-token": "tsx --env-file=.env scripts/refreshToken.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@fastify/rate-limit": "^10.2.2",
+    "@supabase/supabase-js": "^2.47.10",
+    "fastify": "^5.2.1",
+    "openai": "^4.77.3",
+    "pino": "^9.6.0",
+    "tsx": "^4.19.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "eslint": "^9.18.0",
+    "pino-pretty": "^13.0.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^4.0.0"
+  }
+}

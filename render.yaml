@@ -1,0 +1,48 @@
+# Render Blueprint for the bot server.
+#
+# Secrets (sync: false) are NOT stored here — set them in the Render dashboard.
+services:
+  - type: web
+    name: ig-support-bot-backend
+    runtime: node
+    plan: free
+    # --include=dev so the typecheck gate has TypeScript available even with
+    # NODE_ENV=production. The app itself runs via tsx (a runtime dependency).
+    buildCommand: npm ci --include=dev && npm run typecheck
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: LOG_LEVEL
+        value: info
+      - key: GRAPH_BASE
+        value: https://graph.instagram.com
+      - key: GRAPH_VERSION
+        value: v23.0
+      - key: LLM_PROVIDER
+        value: anthropic
+      - key: EMBEDDING_PROVIDER
+        value: openai
+      - key: EMBEDDING_MODEL
+        value: text-embedding-3-small
+      # Secrets and tunables — set these in the dashboard.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: META_VERIFY_TOKEN
+        sync: false
+      - key: IG_ACCESS_TOKEN
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
