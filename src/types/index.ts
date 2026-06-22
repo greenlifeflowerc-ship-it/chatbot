@@ -68,6 +68,9 @@ export interface BusinessProfile {
   contact?: string;
   tone?: string;
   guidelines?: string;
+  website?: string;
+  location?: string;
+  phone?: string;
 }
 
 export interface BotSettings {
@@ -98,12 +101,18 @@ export interface ChunkMatch {
   similarity: number;
 }
 
+export interface InboundAttachment {
+  type: string; // image | audio | video | file | share | story_mention | ...
+  url: string;
+}
+
 // Normalised inbound Instagram message extracted from a webhook payload.
 export interface InboundMessage {
   igMessageId: string;
   senderId: string; // customer IGSID
   recipientId: string; // the business account IGSID
   text: string;
+  attachments: InboundAttachment[];
   timestamp: number;
 }
 

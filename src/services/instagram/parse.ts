@@ -13,6 +13,14 @@ const MessagingSchema = z.object({
       mid: z.string(),
       text: z.string().optional(),
       is_echo: z.boolean().optional(),
+      attachments: z
+        .array(
+          z.object({
+            type: z.string(),
+            payload: z.object({ url: z.string().optional() }).optional(),
+          }),
+        )
+        .optional(),
     })
     .optional(),
 });
@@ -44,8 +52,14 @@ export function extractInboundMessages(payload: WebhookPayload): WebhookMessageE
     for (const m of entry.messaging ?? []) {
       const msg = m.message;
       if (!msg || msg.is_echo) continue;
-      const text = msg.text?.trim();
-      if (!text) continue;
+
+      const text = msg.text?.trim() ?? '';
+      const attachments = (msg.attachments ?? [])
+        .filter((a) => a.payload?.url)
+        .map((a) => ({ type: a.type, url: a.payload!.url! }));
+
+      // Skip events with neither text nor a usable attachment (reactions, reads).
+      if (!text && attachments.length === 0) continue;
 
       events.push({
         eventKey: msg.mid,
@@ -54,6 +68,7 @@ export function extractInboundMessages(payload: WebhookPayload): WebhookMessageE
           senderId: m.sender.id,
           recipientId: m.recipient.id,
           text,
+          attachments,
           timestamp: m.timestamp ?? entry.time ?? 0,
         },
       });

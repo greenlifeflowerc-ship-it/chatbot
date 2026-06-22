@@ -28,6 +28,12 @@ services:
         value: groq
       - key: GROQ_MODEL
         value: llama-3.3-70b-versatile
+      # Voice (Whisper) + image (vision) understanding. Update from
+      # https://console.groq.com/docs/models if Groq changes the names.
+      - key: GROQ_WHISPER_MODEL
+        value: whisper-large-v3
+      - key: GROQ_VISION_MODEL
+        value: meta-llama/llama-4-scout-17b-16e-instruct
       - key: GROQ_API_KEY
         sync: false
       - key: EMBEDDING_PROVIDER

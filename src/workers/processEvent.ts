@@ -3,6 +3,7 @@ import { errorMessage } from '../lib/errors';
 import { logger } from '../lib/logger';
 import { supabase } from '../lib/supabase';
 import { getUserProfile, sendMessage } from '../services/instagram/client';
+import { resolveInboundContent } from '../services/instagram/media';
 import {
   getBotSettings,
   getOrCreateConversation,
@@ -49,9 +50,13 @@ export async function processEvent(event: WebhookMessageEvent): Promise<void> {
     const customer = await upsertCustomer(inbound.senderId, () => getUserProfile(inbound.senderId));
     const { conversation, isNew } = await getOrCreateConversation(customer.id);
 
+    // Resolve voice/image attachments to text (transcribe / describe) so the bot
+    // understands more than plain text.
+    const content = await resolveInboundContent(inbound);
+
     await recordInboundMessage({
       conversationId: conversation.id,
-      content: inbound.text,
+      content,
       igMessageId: inbound.igMessageId,
     });
 
@@ -88,15 +93,20 @@ export async function processEvent(event: WebhookMessageEvent): Promise<void> {
     // AI path. Any failure here (embedding/generation/keys) routes to a human
     // with the auto-reply rather than leaving the customer with no response.
     try {
-      const retrieval = await retrieve(inbound.text);
+      const retrieval = await retrieve(content);
       const history = await getRecentHistory(conversation.id, env.RAG_MAX_HISTORY);
-      const generation = await generateAnswer({ settings, chunks: retrieval.chunks, history });
+      const generation = await generateAnswer({
+        settings,
+        chunks: retrieval.chunks,
+        history,
+        isFirstReply: isNew,
+      });
 
       const decision = decideEscalation({
         settings,
         topSimilarity: retrieval.topSimilarity,
         canAnswer: generation.canAnswer,
-        userText: inbound.text,
+        userText: content,
       });
 
       if (decision.escalate) {

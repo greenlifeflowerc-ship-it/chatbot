@@ -53,6 +53,10 @@ const EnvSchema = z.object({
   // Groq (OpenAI-compatible). Set LLM_PROVIDER=groq and GROQ_API_KEY to use it.
   GROQ_API_KEY: z.string().optional(),
   GROQ_MODEL: z.string().min(1).default('llama-3.3-70b-versatile'),
+  // Voice transcription + image understanding (uses GROQ_API_KEY). Update the
+  // model names from https://console.groq.com/docs/models if Groq changes them.
+  GROQ_WHISPER_MODEL: z.string().min(1).default('whisper-large-v3'),
+  GROQ_VISION_MODEL: z.string().min(1).default('meta-llama/llama-4-scout-17b-16e-instruct'),
 
   // Embeddings (optional). Without OPENAI_API_KEY the bot still answers — it
   // includes the knowledge base text directly instead of vector search.
