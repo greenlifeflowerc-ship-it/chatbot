@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { aiEnabled } from '../config/env';
 import { authenticate, type AuthedAgent } from '../lib/auth';
+import { metrics } from '../lib/metrics';
 import { NotFoundError, UpstreamError, ValidationError, errorMessage } from '../lib/errors';
 import { supabase } from '../lib/supabase';
 import {
@@ -213,6 +214,7 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
         lastHour,
         lastReceivedAt: last?.received_at ?? null,
         lastError: last?.error ?? null,
+        signatureFailures: metrics.webhookSignatureFailures,
       },
     });
   });

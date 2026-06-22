@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { env } from '../config/env';
+import { metrics } from '../lib/metrics';
 import { supabase } from '../lib/supabase';
 import { verifySignature } from '../services/instagram/signature';
 import { extractInboundMessages, parseWebhookPayload } from '../services/instagram/parse';
@@ -25,8 +26,9 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
   app.post('/webhook', async (request, reply) => {
     const signature = request.headers['x-hub-signature-256'];
     if (!request.rawBody || !verifySignature(request.rawBody, typeof signature === 'string' ? signature : undefined)) {
-      // Logged so a secret mismatch is visible in production logs (events arrive
-      // but get rejected). Distinct from Meta not sending anything at all.
+      // Logged + counted so a secret mismatch is visible (events arrive but get
+      // rejected). Distinct from Meta not sending anything at all.
+      metrics.webhookSignatureFailures += 1;
       request.log.warn('webhook signature verification failed (check META_APP_SECRET / IG_APP_SECRET)');
       return reply.code(403).send({ error: 'invalid_signature' });
     }
