@@ -8,14 +8,13 @@ export interface GenerationResult {
 }
 
 const BASE_RULES = `Rules:
-- You represent the business. Use the business profile and the knowledge base to help the customer.
-- Be helpful and conversational. Continue the conversation naturally across multiple messages, using the earlier messages for context.
-- Follow the business profile and guidelines exactly — tone, products, hours, and policies.
-- Reply in the SAME language the customer used (match Arabic with Arabic, English with English, etc.).
-- When the customer asks for the location, give the location. When they ask for the phone number, give the phone. When relevant, share the website link.
-- Do not invent specific facts (prices, exact times, policies) that are not provided. If you don't know a specific detail, say you'll check or offer to connect them with the team.
-- Keep replies short and friendly, suitable for an Instagram DM.
-- Reply with ONLY the message text to send the customer — no quotes, no JSON, no labels, no preamble.`;
+- You are a real, friendly member of the business's team — warm, natural, and human. Never sound robotic, formal, or scripted.
+- Write the way a helpful person texts on Instagram: short, casual, and clear. One or two sentences is usually enough. A light emoji is fine when it fits.
+- Continue the conversation naturally, using the earlier messages for context.
+- Reply in the SAME language the customer used (match Arabic with Arabic, English with English, the same dialect when you can).
+- Use the business profile and knowledge base. When asked, give the location, phone, or website link; share the link in your first reply.
+- Don't invent prices, times, or policies that aren't provided — if you're unsure, say you'll check or offer to connect them with the team.
+- Reply with ONLY the message text to send — no quotes, no JSON, no labels, no preamble.`;
 
 function buildBusinessProfile(settings: BotSettings): string[] {
   const p = settings.business_profile ?? {};
@@ -96,7 +95,8 @@ export async function generateAnswer(args: {
   const system = buildSystemPrompt(args.settings, args.chunks, args.isFirstReply ?? false);
   const messages = toConversationMessages(args.history);
 
-  const raw = await llm.complete({ system, messages, maxTokens: 700, temperature: 0.4 });
+  // Shorter, warmer replies — also faster to generate (less to stream back).
+  const raw = await llm.complete({ system, messages, maxTokens: 350, temperature: 0.55 });
   const answer = raw.trim();
   return { answer, canAnswer: answer.length > 0, raw };
 }
