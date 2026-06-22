@@ -9,6 +9,7 @@ const settings: BotSettings = {
   confidence_threshold: 0.7,
   escalation_keywords: ['human', 'agent', 'complaint'],
   greeting_enabled: true,
+  business_profile: {},
   updated_at: '2026-01-01T00:00:00Z',
 };
 

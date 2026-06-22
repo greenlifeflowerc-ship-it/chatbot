@@ -24,7 +24,9 @@ function fail(message: string, cause: unknown): never {
 export async function getBotSettings(): Promise<BotSettings> {
   const { data, error } = await supabase.from('bot_settings').select('*').eq('id', 1).single();
   if (error) fail('failed to load bot settings', error);
-  return data as BotSettings;
+  const row = data as BotSettings;
+  // Default business_profile so the bot works before the migration is applied.
+  return { ...row, business_profile: row.business_profile ?? {} };
 }
 
 // Insert the customer on first contact, otherwise just refresh last_seen_at.

@@ -44,12 +44,18 @@ const EnvSchema = z.object({
   GRAPH_BASE: z.string().url().default('https://graph.instagram.com'),
   GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/, 'expected a version like v23.0').default('v23.0'),
 
-  // AI is optional. With no keys, the bot does not call any model — it sends the
-  // canned AUTO_REPLY_MESSAGE and routes the conversation to a human.
-  LLM_PROVIDER: z.enum(['anthropic']).default('anthropic'),
+  // AI is optional. With no generation key, the bot does not call any model — it
+  // sends the canned AUTO_REPLY_MESSAGE and routes the conversation to a human.
+  LLM_PROVIDER: z.enum(['anthropic', 'groq']).default('anthropic'),
   LLM_MODEL: z.string().min(1).default('claude-sonnet-4-6'),
   ANTHROPIC_API_KEY: z.string().optional(),
 
+  // Groq (OpenAI-compatible). Set LLM_PROVIDER=groq and GROQ_API_KEY to use it.
+  GROQ_API_KEY: z.string().optional(),
+  GROQ_MODEL: z.string().min(1).default('llama-3.3-70b-versatile'),
+
+  // Embeddings (optional). Without OPENAI_API_KEY the bot still answers — it
+  // includes the knowledge base text directly instead of vector search.
   EMBEDDING_PROVIDER: z.enum(['openai']).default('openai'),
   EMBEDDING_MODEL: z.string().min(1).default('text-embedding-3-small'),
   OPENAI_API_KEY: z.string().optional(),
@@ -90,6 +96,15 @@ export const env: Env = loadEnv();
 
 export const isProduction = env.NODE_ENV === 'production';
 
-// AI is "on" only when both the generation and embedding keys are present.
-// Otherwise the bot runs in no-AI mode (canned reply + human handover).
-export const aiEnabled = Boolean(env.ANTHROPIC_API_KEY && env.OPENAI_API_KEY);
+// Generation is available when the selected provider has its key. Embeddings are
+// separate (Groq has none); without them the bot falls back to including the KB
+// text directly instead of vector search.
+export const generationEnabled =
+  (env.LLM_PROVIDER === 'anthropic' && Boolean(env.ANTHROPIC_API_KEY)) ||
+  (env.LLM_PROVIDER === 'groq' && Boolean(env.GROQ_API_KEY));
+
+export const embeddingsEnabled = Boolean(env.OPENAI_API_KEY);
+
+// The bot replies with AI when it can generate. With no generation key it runs
+// in no-AI mode (canned reply + human handover).
+export const aiEnabled = generationEnabled;

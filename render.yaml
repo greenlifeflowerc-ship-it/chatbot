@@ -23,8 +23,13 @@ services:
         value: https://graph.instagram.com
       - key: GRAPH_VERSION
         value: v23.0
+      # Generation provider: anthropic OR groq. Set the matching key below.
       - key: LLM_PROVIDER
-        value: anthropic
+        value: groq
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GROQ_API_KEY
+        sync: false
       - key: EMBEDDING_PROVIDER
         value: openai
       - key: EMBEDDING_MODEL

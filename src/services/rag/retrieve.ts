@@ -1,4 +1,4 @@
-import { env } from '../../config/env';
+import { embeddingsEnabled, env } from '../../config/env';
 import { UpstreamError } from '../../lib/errors';
 import { supabase } from '../../lib/supabase';
 import { toVectorLiteral } from '../../lib/vector';
@@ -10,10 +10,13 @@ export interface RetrievalResult {
   topSimilarity: number;
 }
 
-// Embed the query and pull the nearest knowledge chunks via match_chunks().
-// topSimilarity is the best cosine similarity found (0 when nothing matched),
-// used downstream as the retrieval-confidence signal for escalation.
+// Pull knowledge-base context for a query. With embeddings configured this is a
+// vector search; without them (e.g. a Groq-only setup) it falls back to
+// including the knowledge text directly. topSimilarity is the retrieval-
+// confidence signal used for escalation.
 export async function retrieve(query: string): Promise<RetrievalResult> {
+  if (!embeddingsEnabled) return retrieveWithoutEmbeddings();
+
   const embeddings = getEmbeddingsProvider();
   const vector = await embeddings.embedOne(query);
 
@@ -27,4 +30,23 @@ export async function retrieve(query: string): Promise<RetrievalResult> {
   const chunks = (data as ChunkMatch[]) ?? [];
   const topSimilarity = chunks.length > 0 ? Math.max(...chunks.map((c) => c.similarity)) : 0;
   return { chunks, topSimilarity };
+}
+
+// No vector search: include the most recent knowledge chunks directly. Similarity
+// is reported as 1 so the low-confidence escalation rule does not fire — the
+// model's can_answer signal decides instead.
+async function retrieveWithoutEmbeddings(): Promise<RetrievalResult> {
+  const { data, error } = await supabase
+    .from('knowledge_chunks')
+    .select('id, content')
+    .order('created_at', { ascending: false })
+    .limit(12);
+  if (error) throw new UpstreamError('failed to load knowledge chunks', { retryable: true, cause: error });
+
+  const chunks = ((data as Array<{ id: string; content: string }>) ?? []).map((c) => ({
+    id: c.id,
+    content: c.content,
+    similarity: 1,
+  }));
+  return { chunks, topSimilarity: 1 };
 }

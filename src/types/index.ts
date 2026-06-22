@@ -58,6 +58,18 @@ export interface KnowledgeChunk {
   created_at: string;
 }
 
+// Editable business profile that shapes the bot's replies. Stored as JSONB on
+// bot_settings; all fields optional.
+export interface BusinessProfile {
+  businessName?: string;
+  about?: string;
+  products?: string;
+  hours?: string;
+  contact?: string;
+  tone?: string;
+  guidelines?: string;
+}
+
 export interface BotSettings {
   id: number;
   disclosure_message: string;
@@ -65,6 +77,7 @@ export interface BotSettings {
   confidence_threshold: number;
   escalation_keywords: string[];
   greeting_enabled: boolean;
+  business_profile: BusinessProfile;
   updated_at: string;
 }
 
