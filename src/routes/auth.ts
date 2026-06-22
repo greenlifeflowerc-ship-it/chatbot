@@ -2,23 +2,8 @@ import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { env } from '../config/env';
 import { buildAuthorizeUrl, exchangeCodeForToken, isOAuthConfigured } from '../services/instagram/oauth';
+import { consumeState, rememberState } from '../services/instagram/oauthState';
 import { getStoredCredentials, saveCredentials } from '../services/instagram/tokenStore';
-
-// CSRF state for the OAuth round-trip. In-memory is sufficient: the flow is a
-// single short browser round-trip, and the free deployment is one instance.
-const STATE_TTL_MS = 10 * 60 * 1000;
-const pendingStates = new Map<string, number>();
-
-function rememberState(state: string): void {
-  pendingStates.set(state, Date.now() + STATE_TTL_MS);
-}
-
-function consumeState(state: string): boolean {
-  const expiry = pendingStates.get(state);
-  if (expiry === undefined) return false;
-  pendingStates.delete(state);
-  return expiry > Date.now();
-}
 
 // When IG_SETUP_SECRET is set, the connect flow requires ?secret=... so random
 // visitors cannot initiate an authorization.

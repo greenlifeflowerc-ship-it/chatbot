@@ -1,9 +1,13 @@
+import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authenticate, type AuthedAgent } from '../lib/auth';
 import { NotFoundError, UpstreamError, ValidationError, errorMessage } from '../lib/errors';
 import { supabase } from '../lib/supabase';
 import { isWithinStandardWindow, sendMessage } from '../services/instagram/client';
+import { buildAuthorizeUrl, isOAuthConfigured } from '../services/instagram/oauth';
+import { rememberState } from '../services/instagram/oauthState';
+import { getStoredCredentials } from '../services/instagram/tokenStore';
 import {
   getConversation,
   recordOutboundMessage,
@@ -139,6 +143,30 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
       });
       throw new UpstreamError('Failed to deliver message to Instagram', { cause: err });
     }
+  });
+
+  // Instagram connection — driven from the dashboard. The agent's session is the
+  // gate, so no setup secret is needed here.
+  app.get('/instagram/status', async (_request, reply) => {
+    const creds = await getStoredCredentials();
+    return reply.send({
+      connected: Boolean(creds),
+      igUserId: creds?.igUserId ?? null,
+      tokenType: creds?.tokenType ?? null,
+      expiresAt: creds?.expiresAt ?? null,
+    });
+  });
+
+  app.get('/instagram/connect-url', async (_request, reply) => {
+    if (!isOAuthConfigured()) {
+      return reply.code(500).send({
+        error: 'oauth_not_configured',
+        message: 'Set IG_APP_ID, IG_APP_SECRET, and IG_REDIRECT_URI on the server.',
+      });
+    }
+    const state = crypto.randomUUID();
+    rememberState(state);
+    return reply.send({ url: buildAuthorizeUrl(state) });
   });
 
   app.post('/knowledge', async (request, reply) => {

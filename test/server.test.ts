@@ -76,6 +76,13 @@ describe('agent routes require authentication', () => {
     });
     expect(res.statusCode).toBe(401);
   });
+
+  it('guards the Instagram connect endpoints', async () => {
+    const status = await app.inject({ method: 'GET', url: '/agent/instagram/status' });
+    const connect = await app.inject({ method: 'GET', url: '/agent/instagram/connect-url' });
+    expect(status.statusCode).toBe(401);
+    expect(connect.statusCode).toBe(401);
+  });
 });
 
 describe('GET /config', () => {
