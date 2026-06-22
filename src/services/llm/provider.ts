@@ -70,6 +70,9 @@ let provider: LlmProvider | null = null;
 
 export function getLlmProvider(): LlmProvider {
   if (provider) return provider;
+  if (!env.ANTHROPIC_API_KEY) {
+    throw new UpstreamError('LLM is not configured (ANTHROPIC_API_KEY missing)', { retryable: false });
+  }
   switch (env.LLM_PROVIDER) {
     case 'anthropic':
       provider = new AnthropicProvider();

@@ -55,6 +55,9 @@ let provider: EmbeddingsProvider | null = null;
 
 export function getEmbeddingsProvider(): EmbeddingsProvider {
   if (provider) return provider;
+  if (!env.OPENAI_API_KEY) {
+    throw new UpstreamError('Embeddings are not configured (OPENAI_API_KEY missing)', { retryable: false });
+  }
   switch (env.EMBEDDING_PROVIDER) {
     case 'openai':
       provider = new OpenAiEmbeddingsProvider();

@@ -44,13 +44,20 @@ const EnvSchema = z.object({
   GRAPH_BASE: z.string().url().default('https://graph.instagram.com'),
   GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/, 'expected a version like v23.0').default('v23.0'),
 
+  // AI is optional. With no keys, the bot does not call any model — it sends the
+  // canned AUTO_REPLY_MESSAGE and routes the conversation to a human.
   LLM_PROVIDER: z.enum(['anthropic']).default('anthropic'),
-  LLM_MODEL: z.string().min(1),
-  ANTHROPIC_API_KEY: z.string().min(1),
+  LLM_MODEL: z.string().min(1).default('claude-sonnet-4-6'),
+  ANTHROPIC_API_KEY: z.string().optional(),
 
   EMBEDDING_PROVIDER: z.enum(['openai']).default('openai'),
   EMBEDDING_MODEL: z.string().min(1).default('text-embedding-3-small'),
-  OPENAI_API_KEY: z.string().min(1),
+  OPENAI_API_KEY: z.string().optional(),
+
+  // Sent when AI is off or unavailable; the conversation is handed to a human.
+  AUTO_REPLY_MESSAGE: z
+    .string()
+    .default('Thanks for your message! Someone from our team will reply shortly.'),
 
   RAG_TOP_K: z.coerce.number().int().positive().max(20).default(5),
   RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.2),
@@ -82,3 +89,7 @@ function loadEnv(): Env {
 export const env: Env = loadEnv();
 
 export const isProduction = env.NODE_ENV === 'production';
+
+// AI is "on" only when both the generation and embedding keys are present.
+// Otherwise the bot runs in no-AI mode (canned reply + human handover).
+export const aiEnabled = Boolean(env.ANTHROPIC_API_KEY && env.OPENAI_API_KEY);

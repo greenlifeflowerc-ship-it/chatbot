@@ -29,6 +29,9 @@ services:
         value: openai
       - key: EMBEDDING_MODEL
         value: text-embedding-3-small
+      # Reply used in no-AI mode (when AI keys are unset) before handing to a human.
+      - key: AUTO_REPLY_MESSAGE
+        value: Thanks for your message! Someone from our team will reply shortly.
       # Secrets and tunables — set these in the dashboard.
       - key: SUPABASE_URL
         sync: false
