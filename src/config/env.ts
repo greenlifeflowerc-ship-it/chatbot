@@ -14,7 +14,10 @@ const EnvSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 
-  META_APP_SECRET: z.string().min(1),
+  // Verifies the webhook signature (X-Hub-Signature-256). Optional because, with
+  // Instagram Login, Meta may sign webhooks with IG_APP_SECRET instead — the
+  // verifier accepts either. At least one of the two must be set (refine below).
+  META_APP_SECRET: z.string().optional(),
   META_VERIFY_TOKEN: z.string().min(1),
 
   // Instagram Business Login (OAuth). The business connects by logging in; the
@@ -49,6 +52,9 @@ const EnvSchema = z.object({
   WORKER_CONCURRENCY: z.coerce.number().int().positive().max(32).default(4),
   LLM_CONCURRENCY: z.coerce.number().int().positive().max(16).default(3),
   HTTP_MAX_RETRIES: z.coerce.number().int().min(0).max(10).default(4),
+}).refine((env) => Boolean(env.META_APP_SECRET || env.IG_APP_SECRET), {
+  message: 'Set META_APP_SECRET or IG_APP_SECRET so webhook signatures can be verified',
+  path: ['META_APP_SECRET'],
 });
 
 export type Env = z.infer<typeof EnvSchema>;
