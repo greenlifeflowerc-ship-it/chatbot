@@ -1,6 +1,7 @@
 import OpenAI, { toFile } from 'openai';
 import { aiEnabled, env } from '../../config/env';
 import { logger } from '../../lib/logger';
+import { nativeFetch } from '../../lib/nativeFetch';
 import { withRetry } from '../../lib/retry';
 import type { InboundMessage } from '../../types';
 
@@ -17,7 +18,7 @@ function groqClient(): OpenAI {
   return new OpenAI({
     apiKey: env.GROQ_API_KEY,
     baseURL: 'https://api.groq.com/openai/v1',
-    fetch: globalThis.fetch,
+    fetch: nativeFetch,
   });
 }
 

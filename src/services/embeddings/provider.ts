@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { env } from '../../config/env';
 import { UpstreamError } from '../../lib/errors';
+import { nativeFetch } from '../../lib/nativeFetch';
 import { withRetry } from '../../lib/retry';
 
 // Embeddings behind a provider interface. The output dimension must match the
@@ -19,7 +20,7 @@ function isRetryableStatus(status: number | undefined): boolean {
 
 class OpenAiEmbeddingsProvider implements EmbeddingsProvider {
   readonly model = env.EMBEDDING_MODEL;
-  private readonly client = new OpenAI({ apiKey: env.OPENAI_API_KEY, fetch: globalThis.fetch });
+  private readonly client = new OpenAI({ apiKey: env.OPENAI_API_KEY, fetch: nativeFetch });
 
   async embed(texts: string[]): Promise<number[][]> {
     if (texts.length === 0) return [];

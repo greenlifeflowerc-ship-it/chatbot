@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { env } from '../../config/env';
 import { UpstreamError } from '../../lib/errors';
 import { llmLimiter } from '../../lib/limiters';
+import { nativeFetch } from '../../lib/nativeFetch';
 import { withRetry } from '../../lib/retry';
 
 // LLM generation behind a provider interface so the model vendor is swappable
@@ -79,9 +80,9 @@ class GroqProvider implements LlmProvider {
   private readonly client = new OpenAI({
     apiKey: env.GROQ_API_KEY,
     baseURL: 'https://api.groq.com/openai/v1',
-    // Use Node's native fetch (undici) instead of the SDK's node-fetch, which can
-    // throw "Premature close" on gzipped responses.
-    fetch: globalThis.fetch,
+    // Native fetch (undici) avoids node-fetch "Premature close" on gzipped
+    // responses; nativeFetch adds the duplex option needed for uploads.
+    fetch: nativeFetch,
   });
 
   async complete(request: LlmRequest): Promise<string> {
