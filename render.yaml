@@ -23,12 +23,18 @@ services:
         value: https://graph.instagram.com
       - key: GRAPH_VERSION
         value: v23.0
-      # Generation provider: anthropic OR groq. Set the matching key below.
+      # Generation provider: groq | gemini | anthropic. Set the matching key.
+      # gemini (Google) has the most generous free limits and reads images.
       - key: LLM_PROVIDER
-        value: groq
+        value: gemini
       - key: GROQ_MODEL
         value: llama-3.3-70b-versatile
-      # Voice (Whisper) + image (vision) understanding. Update from
+      # Google Gemini — free, generous, multimodal. Key: https://aistudio.google.com/apikey
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+      - key: GEMINI_API_KEY
+        sync: false
+      # Voice (Groq Whisper) + Groq image vision. Update from
       # https://console.groq.com/docs/models if Groq changes the names.
       - key: GROQ_WHISPER_MODEL
         value: whisper-large-v3

@@ -46,13 +46,18 @@ const EnvSchema = z.object({
 
   // AI is optional. With no generation key, the bot does not call any model — it
   // sends the canned AUTO_REPLY_MESSAGE and routes the conversation to a human.
-  LLM_PROVIDER: z.enum(['anthropic', 'groq']).default('anthropic'),
+  LLM_PROVIDER: z.enum(['anthropic', 'groq', 'gemini']).default('gemini'),
   LLM_MODEL: z.string().min(1).default('claude-sonnet-4-6'),
   ANTHROPIC_API_KEY: z.string().optional(),
 
   // Groq (OpenAI-compatible). Set LLM_PROVIDER=groq and GROQ_API_KEY to use it.
   GROQ_API_KEY: z.string().optional(),
   GROQ_MODEL: z.string().min(1).default('llama-3.3-70b-versatile'),
+
+  // Google Gemini (OpenAI-compatible). Free + generous + multimodal.
+  // Set LLM_PROVIDER=gemini and GEMINI_API_KEY (https://aistudio.google.com/apikey).
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().min(1).default('gemini-2.0-flash'),
   // Voice transcription + image understanding (uses GROQ_API_KEY). Update the
   // model names from https://console.groq.com/docs/models if Groq changes them.
   GROQ_WHISPER_MODEL: z.string().min(1).default('whisper-large-v3'),
@@ -105,7 +110,8 @@ export const isProduction = env.NODE_ENV === 'production';
 // text directly instead of vector search.
 export const generationEnabled =
   (env.LLM_PROVIDER === 'anthropic' && Boolean(env.ANTHROPIC_API_KEY)) ||
-  (env.LLM_PROVIDER === 'groq' && Boolean(env.GROQ_API_KEY));
+  (env.LLM_PROVIDER === 'groq' && Boolean(env.GROQ_API_KEY)) ||
+  (env.LLM_PROVIDER === 'gemini' && Boolean(env.GEMINI_API_KEY));
 
 export const embeddingsEnabled = Boolean(env.OPENAI_API_KEY);
 

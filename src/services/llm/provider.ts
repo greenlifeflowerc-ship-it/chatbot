@@ -74,23 +74,34 @@ class AnthropicProvider implements LlmProvider {
   }
 }
 
-// Groq is OpenAI-compatible — same chat-completions shape at a different base URL.
-class GroqProvider implements LlmProvider {
-  readonly model = env.GROQ_MODEL;
-  private readonly client = new OpenAI({
-    apiKey: env.GROQ_API_KEY,
-    baseURL: 'https://api.groq.com/openai/v1',
+// Generic OpenAI-compatible provider (Groq, Gemini): same chat-completions
+// shape, different base URL/model. Vision is handled by sending image_url parts;
+// when an image is present the vision model is used.
+interface CompatConfig {
+  apiKey: string;
+  baseURL: string;
+  model: string;
+  visionModel: string;
+  label: string;
+}
+
+class OpenAiCompatProvider implements LlmProvider {
+  readonly model: string;
+  private readonly client: OpenAI;
+
+  constructor(private readonly cfg: CompatConfig) {
+    this.model = cfg.model;
     // Native fetch (undici) avoids node-fetch "Premature close" on gzipped
     // responses; nativeFetch adds the duplex option needed for uploads.
-    fetch: nativeFetch,
-  });
+    this.client = new OpenAI({ apiKey: cfg.apiKey, baseURL: cfg.baseURL, fetch: nativeFetch });
+  }
 
   async complete(request: LlmRequest): Promise<string> {
     const images = request.imageUrls ?? [];
     const hasImages = images.length > 0;
     // When an image is present, use the vision model so it sees the picture and
     // the customer's question together (the question is the latest user turn).
-    const model = hasImages ? env.GROQ_VISION_MODEL : this.model;
+    const model = hasImages ? this.cfg.visionModel : this.cfg.model;
 
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: 'system', content: request.system },
@@ -139,7 +150,7 @@ class GroqProvider implements LlmProvider {
             });
           }
         },
-        { retries: env.HTTP_MAX_RETRIES, label: 'llm.groq.complete' },
+        { retries: env.HTTP_MAX_RETRIES, label: `llm.${this.cfg.label}.complete` },
       ),
     );
   }
@@ -160,7 +171,25 @@ export function getLlmProvider(): LlmProvider {
       if (!env.GROQ_API_KEY) {
         throw new UpstreamError('LLM is not configured (GROQ_API_KEY missing)', { retryable: false });
       }
-      provider = new GroqProvider();
+      provider = new OpenAiCompatProvider({
+        apiKey: env.GROQ_API_KEY,
+        baseURL: 'https://api.groq.com/openai/v1',
+        model: env.GROQ_MODEL,
+        visionModel: env.GROQ_VISION_MODEL,
+        label: 'groq',
+      });
+      return provider;
+    case 'gemini':
+      if (!env.GEMINI_API_KEY) {
+        throw new UpstreamError('LLM is not configured (GEMINI_API_KEY missing)', { retryable: false });
+      }
+      provider = new OpenAiCompatProvider({
+        apiKey: env.GEMINI_API_KEY,
+        baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+        model: env.GEMINI_MODEL,
+        visionModel: env.GEMINI_MODEL, // Gemini Flash is multimodal — same model
+        label: 'gemini',
+      });
       return provider;
     default:
       throw new UpstreamError(`Unsupported LLM provider: ${env.LLM_PROVIDER}`, { retryable: false });

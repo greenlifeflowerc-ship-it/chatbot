@@ -44,16 +44,18 @@ export async function retrieve(query: string): Promise<RetrievalResult> {
 // is reported as 1 so the low-confidence escalation rule does not fire — the
 // model's can_answer signal decides instead.
 async function retrieveWithoutEmbeddings(): Promise<RetrievalResult> {
+  // Keep the context small to stay within token limits — a handful of chunks,
+  // each capped, is enough for the model to ground its reply.
   const { data, error } = await supabase
     .from('knowledge_chunks')
     .select('id, content')
     .order('created_at', { ascending: false })
-    .limit(12);
+    .limit(6);
   if (error) throw new UpstreamError('failed to load knowledge chunks', { retryable: true, cause: error });
 
   const chunks = ((data as Array<{ id: string; content: string }>) ?? []).map((c) => ({
     id: c.id,
-    content: c.content,
+    content: c.content.slice(0, 800),
     similarity: 1,
   }));
   return { chunks, topSimilarity: 1 };
