@@ -25,6 +25,9 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
   app.post('/webhook', async (request, reply) => {
     const signature = request.headers['x-hub-signature-256'];
     if (!request.rawBody || !verifySignature(request.rawBody, typeof signature === 'string' ? signature : undefined)) {
+      // Logged so a secret mismatch is visible in production logs (events arrive
+      // but get rejected). Distinct from Meta not sending anything at all.
+      request.log.warn('webhook signature verification failed (check META_APP_SECRET / IG_APP_SECRET)');
       return reply.code(403).send({ error: 'invalid_signature' });
     }
 
@@ -38,6 +41,10 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
       request.log.warn({ err }, 'unparseable webhook payload; acknowledging');
       return reply.code(200).send({ ok: true });
     }
+
+    // Visible in production logs (request logging is off) so you can confirm Meta
+    // is delivering and how many actionable messages each delivery carried.
+    request.log.info({ inboundMessages: events.length }, 'webhook delivery received');
 
     for (const event of events) {
       // ON CONFLICT DO NOTHING via ignoreDuplicates: a non-empty result means
