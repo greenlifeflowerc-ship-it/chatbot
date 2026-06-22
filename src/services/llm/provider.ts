@@ -27,7 +27,10 @@ export interface LlmProvider {
 }
 
 function isRetryableStatus(status: number | undefined): boolean {
-  return status === 429 || (status !== undefined && status >= 500);
+  // No status => a network/transport error (e.g. "Premature close"). Transient,
+  // so retry it. With a status, only 429 and 5xx are worth retrying.
+  if (status === undefined) return true;
+  return status === 429 || status >= 500;
 }
 
 class AnthropicProvider implements LlmProvider {
@@ -73,6 +76,9 @@ class GroqProvider implements LlmProvider {
   private readonly client = new OpenAI({
     apiKey: env.GROQ_API_KEY,
     baseURL: 'https://api.groq.com/openai/v1',
+    // Use Node's native fetch (undici) instead of the SDK's node-fetch, which can
+    // throw "Premature close" on gzipped responses.
+    fetch: globalThis.fetch,
   });
 
   async complete(request: LlmRequest): Promise<string> {

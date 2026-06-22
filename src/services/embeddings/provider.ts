@@ -13,12 +13,13 @@ export interface EmbeddingsProvider {
 }
 
 function isRetryableStatus(status: number | undefined): boolean {
-  return status === 429 || (status !== undefined && status >= 500);
+  if (status === undefined) return true; // network/transport error — retry
+  return status === 429 || status >= 500;
 }
 
 class OpenAiEmbeddingsProvider implements EmbeddingsProvider {
   readonly model = env.EMBEDDING_MODEL;
-  private readonly client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+  private readonly client = new OpenAI({ apiKey: env.OPENAI_API_KEY, fetch: globalThis.fetch });
 
   async embed(texts: string[]): Promise<number[][]> {
     if (texts.length === 0) return [];
