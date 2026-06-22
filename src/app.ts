@@ -1,11 +1,13 @@
+import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
-import { isProduction } from './config/env';
+import { env, isProduction } from './config/env';
 import { errorMessage, isAppError } from './lib/errors';
 import { logger } from './lib/logger';
 import { agentRoutes } from './routes/agent';
 import { authRoutes } from './routes/auth';
+import { configRoutes } from './routes/config';
 import { healthRoutes } from './routes/health';
 import { webhookRoutes } from './routes/webhook';
 
@@ -44,6 +46,16 @@ export async function buildServer() {
     }
   });
 
+  // CORS so the browser-based dashboard can call /config and /agent. Origins are
+  // restricted by CORS_ORIGINS when set; otherwise any origin is allowed (agent
+  // routes are JWT-protected regardless).
+  const corsOrigins = env.CORS_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean);
+  await app.register(cors, {
+    origin: corsOrigins && corsOrigins.length > 0 ? corsOrigins : true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Authorization', 'Content-Type'],
+  });
+
   // Defensive rate limit on the public surface. Signature verification is the
   // real gate; this caps abusive volume without dropping Meta's normal traffic.
   await app.register(rateLimit, { max: 240, timeWindow: '1 minute', allowList: [] });
@@ -70,6 +82,7 @@ export async function buildServer() {
   });
 
   await app.register(healthRoutes);
+  await app.register(configRoutes);
   await app.register(authRoutes);
   await app.register(webhookRoutes);
   await app.register(agentRoutes, { prefix: '/agent' });

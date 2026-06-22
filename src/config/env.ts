@@ -13,6 +13,13 @@ const EnvSchema = z.object({
 
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  // Public anon key. Served to the Flutter app via GET /config so the app does
+  // not need it baked in at build time. Safe to expose (RLS-protected).
+  SUPABASE_ANON_KEY: z.string().optional(),
+
+  // Comma-separated allowed browser origins for CORS. Unset = allow any origin
+  // (acceptable here: agent routes are JWT-protected, the webhook is signed).
+  CORS_ORIGINS: z.string().optional(),
 
   // Verifies the webhook signature (X-Hub-Signature-256). Optional because, with
   // Instagram Login, Meta may sign webhooks with IG_APP_SECRET instead — the

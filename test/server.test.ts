@@ -78,6 +78,17 @@ describe('agent routes require authentication', () => {
   });
 });
 
+describe('GET /config', () => {
+  it('returns the public Supabase config for the app', async () => {
+    const res = await app.inject({ method: 'GET', url: '/config' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      supabaseUrl: 'https://example.supabase.co',
+      supabaseAnonKey: 'test-anon-key',
+    });
+  });
+});
+
 describe('Instagram connect (OAuth) routes', () => {
   it('refuses to start without the setup secret', async () => {
     const res = await app.inject({ method: 'GET', url: '/auth/instagram' });
